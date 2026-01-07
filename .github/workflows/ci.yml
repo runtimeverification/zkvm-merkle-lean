@@ -44,9 +44,21 @@ jobs:
           cargo hax --version
           which cargo-hax
 
+      - name: Install rsync (required for extraction script)
+        run: |
+          sudo apt-get update && sudo apt-get install -y rsync
+
       - name: Hax extraction (Rust -> Lean)
         run: |
-          ./scripts/extract.sh
+          # Override rust-toolchain.toml to use nightly for hax extraction
+          # Run from crate directory like the extract.sh script does
+          cd rust/merkle_root_rs
+          cargo +nightly hax into lean
+          cd ../..
+          # Copy extracted files (matching extract.sh behavior)
+          rm -rf lean/MerkleRootLean/Extracted
+          mkdir -p lean/MerkleRootLean/Extracted
+          rsync -a --delete rust/merkle_root_rs/proofs/lean/extraction/ lean/MerkleRootLean/Extracted/
 
       - name: Check extraction is committed (no diff)
         run: |
