@@ -1,0 +1,21 @@
+# --- Rust ---
+/rust/**/target/
+**/*.rs.bk
+
+# --- Lean / Lake ---
+/lean/.lake/
+/lean/lake-manifest.json
+/lean/**/.olean
+/lean/**/.ilean
+/lean/**/.c
+/lean/**/.bc
+/lean/**/.so
+/lean/**/.a
+
+# --- OS / editors ---
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
+

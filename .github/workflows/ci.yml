@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  rust_and_hax:
+    runs-on: ubuntu-latest
+    env:
+      CARGO_TERM_COLOR: always
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # -------- Rust --------
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            rust/merkle_root_rs
+
+      - name: Build & test (Rust)
+        working-directory: rust/merkle_root_rs
+        run: |
+          cargo build --verbose
+          cargo test --verbose
+
+      # -------- Install hax (cargo-hax v0.3.5) --------
+      # Minimal: cargo-hax is enough to run `cargo hax into lean` in most setups.
+      - name: Install cargo-hax (v0.3.5)
+        run: |
+          cargo install cargo-hax --version 0.3.5 --locked
+
+      - name: Show hax version
+        run: |
+          cargo hax --version
+          which cargo-hax
+
+      - name: Hax extraction (Rust -> Lean)
+        run: |
+          ./scripts/extract.sh
+
+      - name: Check extraction is committed (no diff)
+        run: |
+          git diff --exit-code -- lean/MerkleRootLean/Extracted
+
+  lean_optional_wip:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install elan (Lean toolchain manager)
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Lean cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.elan
+            lean/.lake
+          key: ${{ runner.os }}-lean-${{ hashFiles('lean-toolchain', 'lean/lean-toolchain', 'lean/lake-manifest.json', 'lean/lakefile.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-lean-
+
+      # Note: currently WIP, expected to fail until Core.* namespace issue is resolved.
+      - name: Build Lean (WIP)
+        working-directory: lean
+        run: |
+          lake update
+          lake build
+
