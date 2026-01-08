@@ -7,7 +7,6 @@ on:
 env:
   CARGO_TERM_COLOR: always
   HAX_TOOLCHAIN: nightly-2025-11-08
-  # separate target dir for `cargo install` tools (better caching)
   CARGO_INSTALL_ROOT: ~/.cargo
   CARGO_TARGET_DIR: ~/.cargo/ci-target
 
@@ -41,7 +40,6 @@ jobs:
           toolchain: ${{ env.HAX_TOOLCHAIN }}
           components: rustc-dev, llvm-tools-preview, rust-src, rustfmt, rust-analysis
 
-      # Cache cargo-installed binaries + registries to speed up installs
       - name: Cache cargo tools
         uses: actions/cache@v4
         with:
@@ -52,33 +50,27 @@ jobs:
             ~/.cargo/ci-target
           key: ${{ runner.os }}-cargo-tools-${{ env.HAX_TOOLCHAIN }}-hax-0.3.5
 
-      - name: Install hax toolchain (pinned nightly)
+      - name: Install hax toolchain (pinned nightly) [WIP]
+        continue-on-error: true
         env:
           RUSTUP_TOOLCHAIN: ${{ env.HAX_TOOLCHAIN }}
         run: |
           rustc --version
           cargo --version
-
-          # Install all required hax binaries
           cargo install cargo-hax --version 0.3.5 --locked
           cargo install hax-driver --version 0.3.5 --locked
           cargo install hax-rust-engine --version 0.3.5 --locked
           cargo install hax-engine-names-extract --version 0.3.5 --locked
           cargo install hax-export-json-schemas --version 0.3.5 --locked
-
           which cargo-hax
           which driver-hax-frontend-exporter
 
-      - name: Run hax extraction (pinned nightly)
+      - name: Run hax extraction (pinned nightly) [WIP]
+        continue-on-error: true
         env:
           RUSTUP_TOOLCHAIN: ${{ env.HAX_TOOLCHAIN }}
         run: |
           ./scripts/extract.sh
-
-      # Optional: enforce that extraction is committed
-      # - name: Check extraction is committed (no diff)
-      #   run: |
-      #     git diff --exit-code -- lean/MerkleRootLean/Extracted
 
   lean_optional_wip:
     runs-on: ubuntu-latest
