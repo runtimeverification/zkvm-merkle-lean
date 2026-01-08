@@ -11,10 +11,8 @@ jobs:
       CARGO_TERM_COLOR: always
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # -------- Rust --------
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable
 
@@ -30,20 +28,22 @@ jobs:
           cargo build --verbose
           cargo test --verbose
 
-      # -------- Install hax (cargo-hax v0.3.5) --------
-      # Minimal: cargo-hax is enough to run `cargo hax into lean` in most setups. 
-      # hax requires Rust nightly 
       - name: Install Rust (nightly) for hax
         uses: dtolnay/rust-toolchain@nightly
         with:
           components: rustc-dev
 
-      - name: Install cargo-hax (nightly)
+      - name: Install hax toolchain (nightly)
         env:
           RUSTUP_TOOLCHAIN: nightly
         run: |
           rustc --version
           cargo install cargo-hax --version 0.3.5 --locked
+          cargo install hax-driver --version 0.3.5 --locked
+          cargo install hax-rust-engine --version 0.3.5 --locked
+          cargo install hax-engine-names-extract --version 0.3.5 --locked
+          cargo install hax-export-json-schemas --version 0.3.5 --locked
+          which driver-hax-frontend-exporter
 
       - name: Run hax extraction (nightly)
         env:
