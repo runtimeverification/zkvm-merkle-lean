@@ -94,7 +94,5 @@ jobs:
     steps:
       - name: Always succeed
         run: |
-          echo "✅ CI всегда зеленый! Все проверки выполнены (или пропущены)."
-          echo "Текущий статус:"
           echo "rust_and_hax: ${{ needs.rust_and_hax.result }}"
           echo "lean_optional_wip: ${{ needs.lean_optional_wip.result }}"
