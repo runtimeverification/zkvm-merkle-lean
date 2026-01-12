@@ -1,8 +1,11 @@
 import MerkleRootLean.Extracted.Merkle_root_rs
--- Two theorems below are not about crypto-security, but it is already machine-checked for the Rust-extracted code.
 
--- merkle_verify_is_pure_eq theorem proves that extracted verify — is the same as “calculate root and compare to expected”.
--- "verify = pure (root == expected_root)" (almost rfl/simp)
+-- The theorems below are not crypto-security statements; they are
+-- machine-checked properties of the Rust-extracted code (in the current model).
+
+/--
+`verify` is definitionally "compute root and compare with expected_root".
+-/
 theorem merkle_verify_is_pure_eq
   (leaf : Merkle_root_rs.Digest)
   (index : u32)
@@ -14,23 +17,25 @@ theorem merkle_verify_is_pure_eq
     =
   (do
     let r ← Merkle_root_rs.merkle_root_from_path leaf index digests hash_pair
-    pure (Core.Cmp.PartialEq.eq Merkle_root_rs.Digest Merkle_root_rs.Digest r expected_root)) := by
-  -- should work:
+    Core.Cmp.PartialEq.eq Merkle_root_rs.Digest Merkle_root_rs.Digest r expected_root) := by
+  -- just unfolding the definition is enough
   simp [Merkle_root_rs.merkle_verify_from_path]
 
--- merkle_verify_of_computed_root_is_true proves the basic soundness property of verify:
--- "if expected_root = compute_root(data), then verify(data, expected_root) = true."
--- "if expected_root = computed_root, verify should return true"
-theorem merkle_verify_of_computed_root_is_true
+/--
+Conditional "acceptance" lemma:
+if `merkle_root_from_path ...` evaluates to `ok r`, then verifying with `expected_root = r`
+evaluates to `ok true`.
+
+This avoids having to prove determinism of re-running `merkle_root_from_path`.
+-/
+theorem merkle_verify_of_root_ok_is_true
   (leaf : Merkle_root_rs.Digest)
   (index : u32)
   (digests : RustSlice Merkle_root_rs.Digest)
   (hash_pair :
-    Merkle_root_rs.Digest → Merkle_root_rs.Digest → RustM Merkle_root_rs.Digest) :
-  (do
-    let r ← Merkle_root_rs.merkle_root_from_path leaf index digests hash_pair
-    Merkle_root_rs.merkle_verify_from_path leaf index digests r hash_pair)
-    =
-  pure true := by
-  -- Unfold verify, and just eq r r left
-  simp [Merkle_root_rs.merkle_verify_from_path]
+    Merkle_root_rs.Digest → Merkle_root_rs.Digest → RustM Merkle_root_rs.Digest)
+  (r : Merkle_root_rs.Digest)
+  (hroot :
+    Merkle_root_rs.merkle_root_from_path leaf index digests hash_pair = RustM.ok r) :
+  Merkle_root_rs.merkle_verify_from_path leaf index digests r hash_pair = RustM.ok true := by
+  simp [Merkle_root_rs.merkle_verify_from_path, hroot]

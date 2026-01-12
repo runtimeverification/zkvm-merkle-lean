@@ -1,12 +1,16 @@
 # Current status
 
-Creating first pipeline Rust → hax → Lean → specification → proof
+Build a first end-to-end prototype pipeline:
 
-## Choosing right candicate for first verification
+Rust → hax extraction → Lean 4 → (specification / proof)
+
+Target: “representative zkVM-related code” with a clear, simple spec and a tractable first proof milestone.
+
+## Choosing an initial verification target
 
 Source: [Risk0 merkle.rs](https://github.com/risc0/risc0/blob/2e73cb82cadfbad9190b2b34f124481c9b57d371/risc0/zkvm/src/receipt/merkle.rs)
 
-Best starting candidate: Merkle proof verification / Merkle root recomputation
+We selected Merkle root recomputation / inclusion verification (the root() and verify() logic) as the first candidate.
 
 ```rust
 impl MerkleProof {
@@ -42,7 +46,7 @@ impl MerkleProof {
 
 ```
 
-### Why this is the best first piece
+### Why this is a strong first candidate
 
 - Actually used in both RISC0 and Jolt (commitments to memory/trace pages)
 - Elementary specification: "root = fold over path"
@@ -51,7 +55,9 @@ impl MerkleProof {
 
 ## Adapt the Rust code for extraction
 
-The simplification is acceptable and well-justified for formal verification purposes: what we did
+Instead of extracting the entire RISC0 codebase, we created a small Rust crate that preserves the algorithm but uses an extraction-friendly interface.
+
+Simplifications performed:
 
 - Removed Trait Dependencies
 - Eliminated Result Type and Error Handling
@@ -59,9 +65,9 @@ The simplification is acceptable and well-justified for formal verification purp
 - Removed Generic Type Parameters
 - Added Toy Hash for Testing
 
-**How it can be united with ArkLib:**
+This is acceptable for formal verification prototyping: we preserved the algorithmic core and created a minimal extraction target.
 
-In ArkLib, the hash_pair can be modeled as a cryptographic oracle. This transforms Merkle root computation into an oracle computation that makes exactly len(digests) queries to the hash oracle, naturally fitting ArkLib's verification framework where algorithms interact with oracle abstractions.
+Example Rust code (core function):
 
 ```rust
 
@@ -130,25 +136,63 @@ mod tests {
 
 We extracted the essence of the Merkle proof algorithm while removing RISC0-specific implementation details.
 
-## Extract code to lean and write/prove first theorems
+## Extraction to Lean and resolving Lean backend gaps
 
-### Theorem 1: `merkle_verify_is_pure_eq`
+We successfully run extraction with: `cargo hax into lean`
 
-Proves that the verification function `merkle_verify_from_path` is purely syntactic unfolding. This property is trivial but important — it shows that the verification code does nothing beyond comparing the computed and expected roots.
+**Core issue encountered**
 
-### Theorem 2: `merkle_verify_of_computed_root_is_true`
+The extracted Lean code referenced parts of the modeled Rust core library that were missing or incomplete in the Lean prelude, specifically:
+
+- Core.Cmp (equality traits / operations)
+- Core.Iter.Traits.* (iterator-based loops: into_iter + fold)
+- generated trait boilerplate with AssociatedTypes
+
+**Resolution**
+
+We asked the hax maintainers Source: [Zulip](https://hacspec.zulipchat.com/#narrow/channel/269544-general/topic/hax.20.2B.20lean.20example/with/561950534)
+
+Following guidance from hax maintainers (Zulip), we implemented a local compatibility layer by extending the vendored Hax Lean core model (Hax.Core) with minimal stubs matching the shapes expected by the extracted output. This enabled the extracted file to typecheck.
+
+Key result: the extracted module now builds in our project: `lake build MerkleRootLean.Extracted.Merkle_root_rs`
+
+## First proven theorems in Lean (Proof.lean)
+
+**Theorem 1: `merkle_verify_is_pure_eq`**
+
+Statement (informal): the extracted verification function is definitionally just:
+
+- compute the Merkle root from the path, then
+- compare it to the expected root.
+
+This is important because it confirms the verification function contains no hidden behavior besides recomputation + comparison.
+
+**Theorem 2: `merkle_verify_of_root_ok_is_true` (conditional acceptance lemma)**
 
 Proves basic soundness of the algorithm:
 - If we compute a root `r` via `merkle_root_from_path`
 - And then verify the same root `r` via `merkle_verify_from_path`
 - The result will always be `true`
 
+Because the extracted code lives in the RustM monad (with ok/fail/div), the appropriate “acceptance” statement is conditional:
+
+If merkle_root_from_path ... = RustM.ok r, then verifying with expected_root = r yields RustM.ok true.
+
+Lean proof file compiles successfully
+
+`lake build MerkleRootLean.Proof`
+
+(Proof uses simp plus a simp-lemma for reflexivity of the modeled equality.)
+
 ```lean
 import MerkleRootLean.Extracted.Merkle_root_rs
--- Two theorems below are not about crypto-security, but it is already machine-checked for the Rust-extracted code.
 
--- merkle_verify_is_pure_eq theorem proves that extracted verify — is the same as “calculate root and compare to expected”.
--- "verify = pure (root == expected_root)" (almost rfl/simp)
+-- The theorems below are not crypto-security statements; they are
+-- machine-checked properties of the Rust-extracted code (in the current model).
+
+/--
+`verify` is definitionally "compute root and compare with expected_root".
+-/
 theorem merkle_verify_is_pure_eq
   (leaf : Merkle_root_rs.Digest)
   (index : u32)
@@ -160,49 +204,58 @@ theorem merkle_verify_is_pure_eq
     =
   (do
     let r ← Merkle_root_rs.merkle_root_from_path leaf index digests hash_pair
-    pure (Core.Cmp.PartialEq.eq Merkle_root_rs.Digest Merkle_root_rs.Digest r expected_root)) := by
-  -- should work:
+    Core.Cmp.PartialEq.eq Merkle_root_rs.Digest Merkle_root_rs.Digest r expected_root) := by
+  -- just unfolding the definition is enough
   simp [Merkle_root_rs.merkle_verify_from_path]
 
--- merkle_verify_of_computed_root_is_true proves the basic soundness property of verify:
--- "if expected_root = compute_root(data), then verify(data, expected_root) = true."
--- "if expected_root = computed_root, verify should return true"
-theorem merkle_verify_of_computed_root_is_true
+/--
+Conditional "acceptance" lemma:
+if `merkle_root_from_path ...` evaluates to `ok r`, then verifying with `expected_root = r`
+evaluates to `ok true`.
+
+This avoids having to prove determinism of re-running `merkle_root_from_path`.
+-/
+theorem merkle_verify_of_root_ok_is_true
   (leaf : Merkle_root_rs.Digest)
   (index : u32)
   (digests : RustSlice Merkle_root_rs.Digest)
   (hash_pair :
-    Merkle_root_rs.Digest → Merkle_root_rs.Digest → RustM Merkle_root_rs.Digest) :
-  (do
-    let r ← Merkle_root_rs.merkle_root_from_path leaf index digests hash_pair
-    Merkle_root_rs.merkle_verify_from_path leaf index digests r hash_pair)
-    =
-  pure true := by
-  -- Unfold verify, and just eq r r left
-  simp [Merkle_root_rs.merkle_verify_from_path]
+    Merkle_root_rs.Digest → Merkle_root_rs.Digest → RustM Merkle_root_rs.Digest)
+  (r : Merkle_root_rs.Digest)
+  (hroot :
+    Merkle_root_rs.merkle_root_from_path leaf index digests hash_pair = RustM.ok r) :
+  Merkle_root_rs.merkle_verify_from_path leaf index digests r hash_pair = RustM.ok true := by
+  simp [Merkle_root_rs.merkle_verify_from_path, hroot]
 
 ```
 
-## Current work summary
+## Notes from hax maintainers (Zulip)
 
-Stage 1 / Recon:
+Source (Zulip thread):
+https://hacspec.zulipchat.com/#narrow/channel/269544-general/topic/hax.20.2B.20lean.20example/with/561950534
 
-We set up a PoC end-to-end pipeline (Rust → cargo hax into lean → Lean project/CI) on a simplified zkVM-representative component: Merkle-path root recomputation (adapted from RISC0, with an extraction-friendly interface). CI is green with hax/Lean steps currently marked non-blocking.
+Key points from maintainers:
 
-Current blocker: the Lean backend extraction succeeds, but the generated Lean module does not typecheck against the current Lean prelude because it references missing/incomplete core models (Core.Cmp, Core.Iter, and generated AssociatedTypes for traits like PartialEq/Eq/Debug, plus iterator/fold APIs).
+- Missing pieces of Core.* in Lean are expected right now; work is ongoing.
+- Preferred workaround currently: define missing Core.* locally or patch extracted output.
+- AssociatedTypes generation is intended.
+- They are moving toward a new methodology: core models written in Rust and extracted to Lean, meaning hand-written Lean core models will likely be replaced soon (Lean-only PRs for core stubs are not a priority upstream).
 
-We asked the hax maintainers Source: [Zulip](https://hacspec.zulipchat.com/#narrow/channel/269544-general/topic/hax.20.2B.20lean.20example/with/561950534)
+## Current work summary (Stage 1 / Recon)
 
-  
-They confirmed this is expected right now. Preferred workaround is to 
-(a) define missing Core.* locally or 
-(b) patch the extracted Lean. They also noted they are switching methodology: core library models will be written in Rust and then extracted to Lean with hax; hand-written Lean core models will soon be replaced.
+What we have:
 
-Next steps:
+- A small reproducible repo demonstrating Rust → hax → Lean extraction for a zkVM-relevant component.
+- A local Lean compatibility layer enabling extracted code to typecheck (addressing missing Core.Cmp and Core.Iter shapes).
+- Two basic machine-checked theorems about the extracted verification logic.
 
-- Build a minimal Rust “core-model” crate for the missing traits/APIs (PartialEq/Eq/Iter) and extract it to Lean (instead of maintaining hand-written Lean stubs).
-- Document the encountered gaps/heuristics and raise issues/PRs where appropriate.
-- Once the extracted Merkle module typechecks, finish at least basic proofs (e.g., verify is “compute root then compare”, plus a trivial acceptance lemma).
+## Next steps (Stage 2 preparation)
 
+- Replace hand-written Lean core stubs with the recommended approach:
+        write minimal Rust “core models” (traits/APIs needed: equality + iteration) and extract them via hax.
+- Strengthen the Merkle specification:
+        model the Merkle root computation as a list fold spec and prove equivalence to the extracted implementation (once iterator semantics is modeled, not stubbed).
+- Re-introduce ArkLib / CompPoly integration:
+        treat hash_pair as an oracle (ArkLib-style) and connect extracted code to higher-level specs when feasible.
 
 

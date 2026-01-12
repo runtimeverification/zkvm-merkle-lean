@@ -47,20 +47,18 @@ end Fmt
 
 namespace Cmp
 
-/-- Marker typeclass: no fields. hax-generated instances are empty. -/
+/-- Marker trait: no fields, so extracted empty instances typecheck. -/
 class PartialEq (A B : Type) : Type where
 
 namespace PartialEq
 class AssociatedTypes (A B : Type) : Type where
 
-/-- Equality operation used by extracted code. -/
-constant eq : (A B : Type) → A → B → RustM Bool
+/-- Uninterpreted equality operator used by extracted code. -/
+opaque eq (A B : Type) (a : A) (b : B) : RustM Bool
 
--- Optional simp lemma (useful later in Proof.lean)
-@[simp] axiom eq_refl : ∀ (A : Type) (a : A), eq A A a a = pure true
+@[simp] axiom eq_refl (A : Type) (a : A) : eq A A a a = pure true
 end PartialEq
 
-/-- Marker typeclass for Eq (also empty). -/
 class Eq (Self : Type) : Type where
 namespace Eq
 class AssociatedTypes (Self : Type) : Type where
@@ -69,7 +67,7 @@ end Eq
 end Cmp
 
 /- ------------------------------------------------------------
-   Core.Iter (minimal, uninterpreted)
+   Core.Iter (minimal, uninterpreted; shape compatible with hax output)
    ------------------------------------------------------------ -/
 
 namespace Iter
@@ -77,27 +75,47 @@ namespace Traits
 
 namespace Iterator
 
-structure Iterator (Item : Type) where
+universe u v
+
+/-- This is the type `Core.Iter.Traits.Iterator.Iterator`. -/
+structure Iterator (Item : Type u) where
   dummy : Unit := ()
 
-def fold {Item Acc : Type} :
+/--
+This is the function `Core.Iter.Traits.Iterator.Iterator.fold`.
+Important: define it as `Iterator.fold`, not just `fold`.
+-/
+def Iterator.fold {Item : Type u} {Acc : Type v} :
   Iterator Item →
   Acc →
   (Acc → Item → RustM Acc) →
-  RustM Acc := sorry
+  RustM Acc := by
+  -- Stub for now (we only need typechecking)
+  sorry
 
 end Iterator
 
 namespace Collect
 namespace IntoIterator
 
-def into_iter {C Item : Type} :
-  C → RustM (Iterator.Iterator Item) := sorry
+universe u v
+
+/--
+This matches the call shape in extracted code:
+`Core.Iter.Traits.Collect.IntoIterator.into_iter (RustSlice α) digests`
+
+So `into_iter` takes the *container type* explicitly first.
+-/
+def into_iter (C : Type u) {Item : Type v} :
+  C → RustM (Core.Iter.Traits.Iterator.Iterator Item) := by
+  -- Stub for now (we only need typechecking)
+  sorry
 
 end IntoIterator
 end Collect
 
 end Traits
 end Iter
+
 
 end Core
