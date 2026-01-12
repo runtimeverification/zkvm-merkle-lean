@@ -7,3 +7,5 @@ import Hax.Core.Panicking
 import Hax.Core.Result
 import Hax.Core.Option
 import Hax.Core.Convert
+
+import Hax.Core.MerklePatch
