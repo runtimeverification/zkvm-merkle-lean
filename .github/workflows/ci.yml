@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CARGO_TERM_COLOR: always
-    continue-on-error: true  # Разрешаем падать всему job
+    continue-on-error: true  
 
     steps:
       - name: Checkout
@@ -21,21 +21,21 @@ jobs:
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
-        continue-on-error: true  # Кэш не критичен
+        continue-on-error: true  
         with:
           workspaces: |
             rust/merkle_root_rs
 
       - name: Build & test (Rust)
         working-directory: rust/merkle_root_rs
-        continue-on-error: true  # Разрешаем падать сборке Rust
+        continue-on-error: true  
         run: |
           cargo build --verbose
           cargo test --verbose
 
       # -------- Install hax (cargo-hax v0.3.5) --------
       - name: Install cargo-hax (v0.3.5)
-        continue-on-error: true  # Hax может не установиться
+        continue-on-error: true  
         run: |
           cargo install cargo-hax --version 0.3.5 --locked
 
@@ -46,31 +46,31 @@ jobs:
           which cargo-hax
 
       - name: Hax extraction (Rust -> Lean)
-        continue-on-error: true  # Экстракция может не работать
+        continue-on-error: true  
         run: |
           ./scripts/extract.sh
 
       - name: Check extraction is committed (no diff)
-        continue-on-error: true  # Проверка diff не критична
+        continue-on-error: true  
         run: |
           git diff --exit-code -- lean/MerkleRootLean/Extracted
 
   lean_optional_wip:
     runs-on: ubuntu-latest
-    continue-on-error: true  # Весь job может падать
+    continue-on-error: true 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install elan (Lean toolchain manager)
-        continue-on-error: true  # Установка elan может не сработать
+        continue-on-error: true 
         run: |
           curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
           echo "$HOME/.elan/bin" >> $GITHUB_PATH
 
       - name: Lean cache
         uses: actions/cache@v4
-        continue-on-error: true  # Кэш не критичен
+        continue-on-error: true
         with:
           path: |
             ~/.elan
@@ -82,15 +82,15 @@ jobs:
       # Note: currently WIP, expected to fail until Core.* namespace issue is resolved.
       - name: Build Lean (WIP)
         working-directory: lean
-        continue-on-error: true  # Lean build может падать
+        continue-on-error: true  # Lean build can fail
         run: |
           lake update
           lake build
 
   always_pass:
     runs-on: ubuntu-latest
-    needs: [rust_and_hax, lean_optional_wip]  # Ждем оба job
-    if: always()  # Запускаемся всегда, даже если предыдущие упали
+    needs: [rust_and_hax, lean_optional_wip]  
+    if: always()  
     steps:
       - name: Always succeed
         run: |
