@@ -54,7 +54,7 @@ instance Merkle_root_rs.Impl_5.AssociatedTypes :
 
 instance Merkle_root_rs.Impl_5 : Core.Fmt.Debug Merkle_root_rs.Digest where
 
-def Merkle_root_rs.merkle_root_from_path
+noncomputable def Merkle_root_rs.merkle_root_from_path
   (leaf : Merkle_root_rs.Digest)
   (index : u32)
   (digests : (RustSlice Merkle_root_rs.Digest))
@@ -85,7 +85,7 @@ def Merkle_root_rs.merkle_root_from_path
         (Rust_primitives.Hax.Tuple2 Merkle_root_rs.Digest u32))));
   (pure cur)
 
-def Merkle_root_rs.merkle_verify_from_path
+noncomputable def Merkle_root_rs.merkle_verify_from_path
   (leaf : Merkle_root_rs.Digest)
   (index : u32)
   (digests : (RustSlice Merkle_root_rs.Digest))
